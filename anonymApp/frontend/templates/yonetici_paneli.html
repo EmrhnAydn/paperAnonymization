@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Yönetici Paneli{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Yönetici Paneli</h2>
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Makale ID</th>
+                <th>Takip Numarası</th>
+                <th>Yazar E-postası</th>
+                <th>Makale PDF</th>
+                <th>Aksiyonlar</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for makale in makaleler %}
+            <tr>
+                <td>{{ makale['id'] }}</td>
+                <td>{{ makale['takip_numarasi'] }}</td>
+                <td>{{ makale['email'] }}</td>
+                <td>
+                    <a href="{{ url_for('download_pdf', makale_id=makale['id']) }}" class="btn btn-outline-secondary btn-sm">
+                        İndir
+                    </a>
+                </td>
+                <td>
+                    <!-- 1) Chat butonunu ekleyelim -->
+                    <a href="{{ url_for('chat', makale_id=makale['id']) }}" class="btn btn-info btn-sm">Chat</a>
+
+                    <!-- 2) Atama işlemleri için kullandığınız Modal butonu -->
+                    <button class="btn btn-warning btn-sm" 
+                            data-bs-toggle="modal"
+                            data-bs-target="#atamaModal"
+                            data-makaleid="{{ makale['id'] }}"
+                            data-takip="{{ makale['takip_numarasi'] }}"
+                            data-email="{{ makale['email'] }}"
+                            data-baslik="{{ makale['baslik'] }}">
+                        Atama işlemleri
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Modal Pencere -->
+<div class="modal fade" id="atamaModal" tabindex="-1" aria-labelledby="atamaModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg text-dark">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="atamaModalLabel">Atama İşlemleri</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Makale Bilgileri -->
+        <div id="articleDetails" class="mb-3">
+          <h6>Makale Bilgileri</h6>
+          <p><strong>Makale ID:</strong> <span id="modalMakaleId"></span></p>
+          <p><strong>Takip Numarası:</strong> <span id="modalTakipNumarasi"></span></p>
+          <p><strong>Yazar E-postası:</strong> <span id="modalEmail"></span></p>
+          <p><strong>Makale Başlığı:</strong> <span id="modalBaslik"></span></p>
+          <input type="hidden" id="selectedArticleId">
+        </div>
+
+        <!-- (Örnek) Anonimleştirme Bölümü -->
+        <h6>Anonimleştirme</h6>
+        <div class="border p-2 mb-3">
+          <!-- Checkboxlar -->
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="" id="chkAll">
+            <label class="form-check-label" for="chkAll">Tümü</label>
+          </div>
+          <div class="form-check ms-3">
+            <input class="form-check-input chkOption" type="checkbox" value="" id="chkInstitution">
+            <label class="form-check-label" for="chkInstitution">Kurum Bilgileri</label>
+          </div>
+          <div class="form-check ms-3">
+            <input class="form-check-input chkOption" type="checkbox" value="" id="chkPerson">
+            <label class="form-check-label" for="chkPerson">Kişi Bilgileri</label>
+          </div>
+          <div class="form-check ms-3">
+            <input class="form-check-input chkOption" type="checkbox" value="" id="chkImages">
+            <label class="form-check-label" for="chkImages">Görseller</label>
+          </div>
+          <!-- Anonimleştir Butonu -->
+          <div class="mt-3">
+            <button class="btn btn-primary btn-sm" id="btnAnonymize">Anonimleştir</button>
+          </div>
+        </div>
+
+        <!-- İndirme Bölümü -->
+        <div class="border p-2 mb-3">
+          <h6>İndirme İşlemleri</h6>
+          <div class="d-flex gap-2">
+            <!-- Orijinal PDF İndir -->
+            <a href="#" class="btn btn-outline-secondary btn-sm" id="downloadOriginal">Orijinal PDF İndir</a>
+            <!-- Anonim PDF İndir -->
+            <a href="#" class="btn btn-outline-secondary btn-sm" id="downloadAnon" disabled>Anonim PDF İndir</a>
+          </div>
+        </div>
+
+        <!-- Hakem Atama Bölümü -->
+        <h6>Hakem Atama</h6>
+        <div class="border p-2 mb-3">
+          <p>Hakem atama işlemi burada yer alacak (şimdilik placeholder).</p>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Modal açılırken tıklanan butonun row bilgilerini modal alanlarına aktaralım
+const atamaModalEl = document.getElementById('atamaModal');
+atamaModalEl.addEventListener('show.bs.modal', function (event) {
+  const button = event.relatedTarget; // Modalı tetikleyen buton
+  // Data özniteliklerini okuyalım
+  const makaleId = button.getAttribute('data-makaleid');
+  const takip = button.getAttribute('data-takip');
+  const email = button.getAttribute('data-email');
+  const baslik = button.getAttribute('data-baslik');
+
+  // Modal içindeki ilgili elementlere yazalım
+  document.getElementById("modalMakaleId").textContent = makaleId;
+  document.getElementById("modalTakipNumarasi").textContent = takip;
+  document.getElementById("modalEmail").textContent = email;
+  document.getElementById("modalBaslik").textContent = baslik;
+  document.getElementById("selectedArticleId").value = makaleId;
+
+  // Orijinal PDF indir butonunu ayarlayalım
+  const downloadOriginalLink = document.getElementById("downloadOriginal");
+  downloadOriginalLink.href = `/download/${makaleId}`;
+
+  // Anonim PDF indir butonunu başlangıçta devre dışı bırakalım
+  const downloadAnonLink = document.getElementById("downloadAnon");
+  downloadAnonLink.href = `/download-anonymized/${makaleId}`;
+  downloadAnonLink.disabled = true;
+
+  // Checkboxları sıfırlayalım
+  document.getElementById("chkAll").checked = false;
+  document.getElementById("chkInstitution").checked = false;
+  document.getElementById("chkPerson").checked = false;
+  document.getElementById("chkImages").checked = false;
+});
+
+// Checkbox mantığı: "Tümü" seçilince diğer checkboxlar işaretlensin
+const chkAll = document.getElementById("chkAll");
+const chkOptions = document.querySelectorAll(".chkOption");
+
+chkAll.addEventListener("change", function() {
+  const checked = this.checked;
+  chkOptions.forEach(chk => { chk.checked = checked; });
+});
+
+// Eğer bireysel checkboxlardan biri kaldırılırsa, "Tümü" kaldırılacak
+chkOptions.forEach(chk => {
+  chk.addEventListener("change", function() {
+    if (!this.checked) {
+      chkAll.checked = false;
+    }
+    if (Array.from(chkOptions).every(x => x.checked)) {
+      chkAll.checked = true;
+    }
+  });
+});
+
+// Anonimleştir butonuna tıklanınca (şimdilik alert veriyoruz)
+document.getElementById("btnAnonymize").addEventListener("click", function() {
+  const makaleId = document.getElementById("selectedArticleId").value;
+  alert("Anonimleştirme işlemi için makale ID: " + makaleId);
+  // İşlem tamamlandığında anonim PDF indir butonunu aktif edebilirsiniz:
+  document.getElementById("downloadAnon").disabled = false;
+});
+</script>
+{% endblock %}

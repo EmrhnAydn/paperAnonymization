@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Makale Yükleme{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Makale Yükleme</h2>
+
+    <!-- Flask flash mesajlarını göster -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} mt-3">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- Eğer takip numarası varsa, form gönderildi ve başarılı oldu -->
+    {% if takip_numarasi %}
+      <div class="alert alert-success mt-3">
+        <strong>Makaleniz başarıyla yüklendi!</strong><br>
+        Takip Numaranız: <b>{{ takip_numarasi }}</b><br>
+        Makale Boyutu: <b>{{ file_size }} byte</b>
+      </div>
+    {% endif %}
+
+    <!-- Yükleme Formu -->
+    <form method="POST" enctype="multipart/form-data" id="uploadForm">
+        <div class="mb-3">
+            <label for="email" class="form-label">E-posta:</label>
+            <input type="email" class="form-control" name="email" id="email" required placeholder="E-posta adresinizi giriniz">
+        </div>
+        <div class="mb-3">
+            <label for="baslik" class="form-label">Makale Başlığı:</label>
+            <input type="text" class="form-control" name="baslik" id="baslik" required placeholder="Makale başlığını giriniz">
+        </div>
+        <div class="mb-3">
+            <label for="pdf_file" class="form-label">PDF Yükle:</label>
+            <input type="file" class="form-control" name="pdf_file" id="pdf_file" accept="application/pdf" required>
+        </div>
+        <button type="submit" class="btn btn-primary" id="uploadButton">Yükle</button>
+    </form>
+</div>
+
+<!-- Butonun Kilitlenmesini Önlemek İçin JavaScript -->
+<script>
+document.getElementById("uploadForm").addEventListener("submit", function(event) {
+    let uploadButton = document.getElementById("uploadButton");
+    uploadButton.innerText = "Yükleniyor...";
+    uploadButton.disabled = true;
+});
+</script>
+
+{% endblock %}

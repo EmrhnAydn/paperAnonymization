@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Hakem Paneli{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Makale Değerlendirme</h2>
+    <form>
+        <div class="mb-3">
+            <label class="form-label">Anonimleştirilmiş Makale PDF</label>
+            <a href="#" class="form-control btn btn-outline-secondary">İndir</a>
+        </div>
+        <div class="mb-3">
+            <label for="comments" class="form-label">Değerlendirme Yorumları</label>
+            <textarea class="form-control" id="comments" rows="6" placeholder="Yorumlarınızı buraya giriniz"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Değerlendirmeyi Gönder</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Makale Chat{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Makale Chat ({{ makale['baslik'] }})</h2>
+
+    <div class="border p-2 mb-3" style="height: 200px; overflow-y: auto; background: #f8f9fa; color: #000;">
+        {% if messages %}
+            {% for msg in messages %}
+                <p>
+                    <strong>{{ msg['gonderen'] }}:</strong>
+                    {{ msg['icerik'] }}
+                    <small class="text-muted">({{ msg['tarih'] }})</small>
+                </p>
+            {% endfor %}
+        {% else %}
+            <p class="text-muted"><em>Bu makaleye ait mesaj bulunmuyor.</em></p>
+        {% endif %}
+    </div>
+
+    <!-- Yeni mesaj gönderme formu -->
+    <form method="POST">
+        <div class="mb-3">
+            <label for="icerik" class="form-label">Mesajınız:</label>
+            <textarea class="form-control" name="icerik" id="icerik" rows="3" 
+                      required placeholder="Mesajınızı yazın..." autocomplete="off"></textarea>
+        </div>
+        <button type="submit" class="btn btn-success">Gönder</button>
+    </form>
+</div>
+{% endblock %}

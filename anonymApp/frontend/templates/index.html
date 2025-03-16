@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}Anasayfa{% endblock %}
+
+{% block content %}
+<h1 class="text-light main-title">Güvenli Belge Anonimleştirme Sistemi</h1>
+<div class="d-flex justify-content-center main-btn-group">
+    <a href="{{ url_for('makale_yukle') }}" class="btn btn-outline-light main-btn main-btn-group">Makale Yükle</a>
+    <a href="{{ url_for('makale_sorgula') }}" class="btn btn-outline-light main-btn main-btn-group">Durum Sorgula</a>
+    <a href="{{ url_for('yonetici_paneli') }}" class="btn btn-outline-light main-btn-group">Yönetici Paneli</a>
+    <a href="{{ url_for('hakem_paneli') }}" class="btn btn-outline-light main-btn-group">Hakem Paneli</a>
+</div>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Makale Durum Sorgulama{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Makale Durumu Sorgulama</h2>
+    <!-- Sorgulama Formu -->
+    <form method="POST">
+        <div class="mb-3">
+            <label for="takip_numarasi" class="form-label">Takip Numarası:</label>
+            <input type="text" class="form-control" name="takip_numarasi" id="takip_numarasi" 
+                   required placeholder="Takip numaranızı giriniz" autocomplete="off">
+        </div>
+        <div class="mb-3">
+            <label for="email" class="form-label">E-posta:</label>
+            <input type="email" class="form-control" name="email" id="email" 
+                   required placeholder="Makale yüklerken kullandığınız e-posta" autocomplete="email">
+        </div>
+        <button type="submit" class="btn btn-primary">Sorgula</button>
+    </form>
+
+    {% if makale %}
+        <hr>
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <h4>Makale Bilgileri</h4>
+                <p><strong>Başlık:</strong> {{ makale['baslik'] }}</p>
+                
+                <p><strong>Durum:</strong>
+                    {% if makale['durum'] == 'Uploaded' %}
+                        Sisteme Yüklendi - İncelenme bekleniyor
+                    {% elif makale['durum'] == 'Under Review' %}
+                        Hakem Atandı - İnceleme Bekleniyor
+                    {% else %}
+                        {{ makale['durum'] }}
+                    {% endif %}
+                </p>
+
+                <p><strong>Yükleme Tarihi:</strong> {{ makale['yukleme_tarihi'] }}</p>
+                
+                <!-- Chat için yeni buton -->
+                <a href="{{ url_for('chat', makale_id=makale['id']) }}" class="btn btn-secondary">Chat</a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
