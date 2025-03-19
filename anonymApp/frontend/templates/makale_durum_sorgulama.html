@@ -40,7 +40,10 @@
                 <p><strong>Yükleme Tarihi:</strong> {{ makale['yukleme_tarihi'] }}</p>
                 
                 <!-- Chat için yeni buton -->
-                <a href="{{ url_for('chat', makale_id=makale['id']) }}" class="btn btn-secondary">Chat</a>
+                <a href="{{ url_for('chat', makale_id=makale['id'], role='author') }}"
+                    class="btn btn-secondary">
+                    Chat
+                </a>
             </div>
         </div>
     {% endif %}

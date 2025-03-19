@@ -28,7 +28,10 @@
                 </td>
                 <td>
                     <!-- 1) Chat butonunu ekleyelim -->
-                    <a href="{{ url_for('chat', makale_id=makale['id']) }}" class="btn btn-info btn-sm">Chat</a>
+                    <a href="{{ url_for('chat', makale_id=makale['id'], role='admin') }}" 
+                    class="btn btn-info btn-sm">
+                    Chat
+                   </a>
 
                     <!-- 2) Atama işlemleri için kullandığınız Modal butonu -->
                     <button class="btn btn-warning btn-sm" 
@@ -105,8 +108,40 @@
 
         <!-- Hakem Atama Bölümü -->
         <h6>Hakem Atama</h6>
-        <div class="border p-2 mb-3">
-          <p>Hakem atama işlemi burada yer alacak (şimdilik placeholder).</p>
+         <!-- Eğer makale ATANMIŞSA gösterilecek alan -->
+  <div id="alreadyAssigned" style="display: none;">
+    <p class="text-success fw-bold">Bu makale zaten atandı!</p>
+    <p>
+      <strong>Hakem:</strong>
+      <span id="assignedReviewerName"></span> (<span id="assignedReviewerExpertise"></span>)<br/>
+      <strong>Açıklama:</strong> <span id="assignedDegerlendirmeMetin"></span><br/>
+      <strong>Atama Tarihi:</strong> <span id="assignedDate"></span>
+    </p>
+
+    <!-- Hakem Değiştir Kısmı -->
+    <hr/>
+    <div>
+      <h6>Hakem Değiştir</h6>
+      <select id="reviewerSelect" class="form-select form-select-sm mb-2" style="max-width: 300px;">
+        <!-- JS ile dolduracağız -->
+      </select>
+      <button class="btn btn-danger btn-sm" id="btnChangeReviewer">Değiştir</button>
+    </div>
+  </div>
+
+  <!-- Eğer makale HENÜZ ATANMAMIŞSA gösterilecek alan -->
+  <div id="notAssigned" style="display: none;">
+    <button class="btn btn-secondary btn-sm" id="btnFindArea">Makalenin Alanını Bul</button>
+
+    <div id="reviewerResult" class="mt-2" style="display: none;">
+      <p><strong>Tahmin Edilen Alan:</strong> <span id="foundSubjectArea"></span></p>
+      <p><strong>Önerilen Hakem:</strong> <span id="foundReviewer"></span></p>
+    </div>
+
+    <button class="btn btn-success btn-sm mt-2" id="btnAssignReviewer" style="display: none;">
+      Hakemi Ata
+    </button>
+  </div>
         </div>
 
       </div>
@@ -120,40 +155,225 @@
 
 {% block scripts %}
 <script>
-// Modal açılırken tıklanan butonun row bilgilerini modal alanlarına aktaralım
 const atamaModalEl = document.getElementById('atamaModal');
 atamaModalEl.addEventListener('show.bs.modal', function (event) {
-  const button = event.relatedTarget; // Modalı tetikleyen buton
-  // Data özniteliklerini okuyalım
+  const button = event.relatedTarget;
   const makaleId = button.getAttribute('data-makaleid');
   const takip = button.getAttribute('data-takip');
   const email = button.getAttribute('data-email');
   const baslik = button.getAttribute('data-baslik');
 
-  // Modal içindeki ilgili elementlere yazalım
   document.getElementById("modalMakaleId").textContent = makaleId;
   document.getElementById("modalTakipNumarasi").textContent = takip;
   document.getElementById("modalEmail").textContent = email;
   document.getElementById("modalBaslik").textContent = baslik;
   document.getElementById("selectedArticleId").value = makaleId;
 
-  // Orijinal PDF indir butonunu ayarlayalım
-  const downloadOriginalLink = document.getElementById("downloadOriginal");
-  downloadOriginalLink.href = `/download/${makaleId}`;
+  // Orijinal PDF indir
+  document.getElementById("downloadOriginal").href = `/download/${makaleId}`;
+  // Anonim PDF indir
+  document.getElementById("downloadAnon").href = `/download-anonymized/${makaleId}`;
+  document.getElementById("downloadAnon").disabled = true;
 
-  // Anonim PDF indir butonunu başlangıçta devre dışı bırakalım
-  const downloadAnonLink = document.getElementById("downloadAnon");
-  downloadAnonLink.href = `/download-anonymized/${makaleId}`;
-  downloadAnonLink.disabled = true;
-
-  // Checkboxları sıfırlayalım
+  // Checkboxları reset
   document.getElementById("chkAll").checked = false;
   document.getElementById("chkInstitution").checked = false;
   document.getElementById("chkPerson").checked = false;
   document.getElementById("chkImages").checked = false;
+
+  // Hakem atama alanlarını reset
+  document.getElementById("alreadyAssigned").style.display = 'none';
+  document.getElementById("notAssigned").style.display = 'none';
+
+  // Assigned alanını sıfırla
+  document.getElementById("assignedReviewerName").textContent = '';
+  document.getElementById("assignedReviewerExpertise").textContent = '';
+  document.getElementById("assignedDegerlendirmeMetin").textContent = '';
+  document.getElementById("assignedDate").textContent = '';
+
+  // Not assigned alanını sıfırla
+  document.getElementById("reviewerResult").style.display = 'none';
+  document.getElementById("btnAssignReviewer").style.display = 'none';
+  document.getElementById("foundSubjectArea").textContent = '';
+  document.getElementById("foundReviewer").textContent = '';
+
+  // =========== 1) Makale Atanmış mı Kontrolü ===========
+  fetch('/api/check_assignment', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ makale_id: makaleId })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      alert(data.error);
+      return;
+    }
+
+    if (data.assigned) {
+      // 1.a) Makale zaten atanmış
+      document.getElementById("alreadyAssigned").style.display = 'block';
+      document.getElementById("assignedReviewerName").textContent = data.hakem_ad;
+      document.getElementById("assignedReviewerExpertise").textContent = data.hakem_uzmanlik;
+      document.getElementById("assignedDegerlendirmeMetin").textContent = data.degerlendirme_metin;
+      document.getElementById("assignedDate").textContent = data.tarih;
+
+      // 1.a.i) Tüm hakemleri çekip combobox’a dolduralım
+      loadAllReviewers();
+      
+    } else {
+      // 1.b) Makale henüz atanmamış
+      document.getElementById("notAssigned").style.display = 'block';
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    alert("Atama kontrolü sırasında bir hata oluştu.");
+  });
 });
 
-// Checkbox mantığı: "Tümü" seçilince diğer checkboxlar işaretlensin
+// ================== loadAllReviewers() fonksiyonu ==================
+function loadAllReviewers() {
+  const reviewerSelect = document.getElementById("reviewerSelect");
+  // Önce temizleyelim:
+  reviewerSelect.innerHTML = "";
+
+  fetch('/api/get_reviewers')
+    .then(res => res.json())
+    .then(data => {
+      // data => [{id, ad, uzmanlik}, ...]
+      data.forEach(reviewer => {
+        const option = document.createElement("option");
+        option.value = reviewer.id;
+        option.textContent = reviewer.ad + " (" + reviewer.uzmanlik + ")";
+        reviewerSelect.appendChild(option);
+      });
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Hakem listesi çekilirken hata oluştu.");
+    });
+}
+
+// ================== Hakem Değiştir ==================
+document.getElementById("btnChangeReviewer").addEventListener("click", function() {
+  const makaleId = document.getElementById("selectedArticleId").value;
+  const newHakemId = document.getElementById("reviewerSelect").value;
+  if (!newHakemId) {
+    alert("Lütfen bir hakem seçiniz!");
+    return;
+  }
+
+  fetch('/api/change_reviewer', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      makale_id: makaleId,
+      hakem_id: newHakemId
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      alert("Hata: " + data.error);
+      return;
+    }
+    alert(data.message || "Hakem başarıyla değiştirildi.");
+
+    // Değişiklik sonrası atanan hakem bilgisini tekrar çekelim:
+    // (Opsiyonel) Tekrar check_assignment çağırabiliriz veya
+    // location.reload() ile sayfayı yenileyebiliriz.
+    // Burada sadece check_assignment benzeri bir yaklaşım yapalım:
+    fetch('/api/check_assignment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ makale_id: makaleId })
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d.assigned) {
+        // UI güncelle
+        document.getElementById("assignedReviewerName").textContent = d.hakem_ad;
+        document.getElementById("assignedReviewerExpertise").textContent = d.hakem_uzmanlik;
+        document.getElementById("assignedDegerlendirmeMetin").textContent = d.degerlendirme_metin;
+        document.getElementById("assignedDate").textContent = d.tarih;
+      }
+    });
+  })
+  .catch(err => {
+    console.error(err);
+    alert("Hakem değiştirme sırasında bir hata oluştu.");
+  });
+});
+
+// ================== "Makalenin Alanını Bul" Akışı (atanmamışsa) ==================
+document.getElementById("btnFindArea").addEventListener("click", function() {
+  const makaleId = document.getElementById("selectedArticleId").value;
+  fetch('/api/find_reviewer', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ makale_id: makaleId })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      alert("Hata: " + data.error);
+      return;
+    }
+    // "reviewerResult" kutusunu göster
+    document.getElementById("reviewerResult").style.display = 'block';
+    document.getElementById("foundSubjectArea").textContent = data.subject_area || "Unknown";
+
+    if (data.best_reviewer) {
+      document.getElementById("foundReviewer").textContent =
+        data.best_reviewer.ad + " (" + data.best_reviewer.uzmanlik + ")";
+      document.getElementById("btnAssignReviewer").style.display = 'inline-block';
+      document.getElementById("btnAssignReviewer").setAttribute('data-hakemid', data.best_reviewer.id);
+    } else {
+      document.getElementById("foundReviewer").textContent = "Uygun hakem bulunamadı.";
+      document.getElementById("btnAssignReviewer").style.display = 'none';
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    alert("Beklenmeyen bir hata oluştu.");
+  });
+});
+
+// ================== Hakemi Ata (atanmamış makale için) ==================
+document.getElementById("btnAssignReviewer").addEventListener("click", function() {
+  const makaleId = document.getElementById("selectedArticleId").value;
+  const hakemId = this.getAttribute('data-hakemid');
+  
+  fetch('/api/assign_reviewer', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ makale_id: makaleId, hakem_id: hakemId })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      alert("Hata: " + data.error);
+      return;
+    }
+    alert(data.message || "Hakem atandı!");
+    // sayfa/alan güncellemesi
+    // location.reload();
+  })
+  .catch(err => {
+    console.error(err);
+    alert("Beklenmeyen bir hata oluştu.");
+  });
+});
+
+// ================== Anonimleştirme Örneği ==================
+document.getElementById("btnAnonymize").addEventListener("click", function() {
+  const makaleId = document.getElementById("selectedArticleId").value;
+  alert("Anonimleştirme işlemi (örnek) için makale ID: " + makaleId);
+  document.getElementById("downloadAnon").disabled = false;
+});
+
+// ================== Checkbox Mantığı (Tümü vs.) ==================
 const chkAll = document.getElementById("chkAll");
 const chkOptions = document.querySelectorAll(".chkOption");
 
@@ -162,7 +382,6 @@ chkAll.addEventListener("change", function() {
   chkOptions.forEach(chk => { chk.checked = checked; });
 });
 
-// Eğer bireysel checkboxlardan biri kaldırılırsa, "Tümü" kaldırılacak
 chkOptions.forEach(chk => {
   chk.addEventListener("change", function() {
     if (!this.checked) {
@@ -173,13 +392,6 @@ chkOptions.forEach(chk => {
     }
   });
 });
-
-// Anonimleştir butonuna tıklanınca (şimdilik alert veriyoruz)
-document.getElementById("btnAnonymize").addEventListener("click", function() {
-  const makaleId = document.getElementById("selectedArticleId").value;
-  alert("Anonimleştirme işlemi için makale ID: " + makaleId);
-  // İşlem tamamlandığında anonim PDF indir butonunu aktif edebilirsiniz:
-  document.getElementById("downloadAnon").disabled = false;
-});
 </script>
 {% endblock %}
+

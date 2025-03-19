@@ -156,3 +156,92 @@ def insert_message(makale_id, gonderen, icerik):
     cursor.execute(query, (makale_id, gonderen, icerik))
     conn.commit()
     conn.close()
+
+
+def insert_degerlendirme(makale_id, hakem_id):
+    """
+    Degerlendirme tablosuna bir satır ekler.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    query = """
+    INSERT INTO Degerlendirme (makale_id, hakem_id, degerlendirme_metin)
+    VALUES (?, ?, ?)
+    """
+    # degerlendirme_metin şimdilik boş veya 'Atandı' gibi sabit bir şey olabilir
+    cursor.execute(query, (makale_id, hakem_id, 'Atama yapıldı'))
+    conn.commit()
+    conn.close()
+
+
+def check_assignment(makale_id):
+    """
+    Degerlendirme tablosundan bu makale_id'ye ait herhangi bir hakem ataması var mı?
+    Varsa hakem bilgileriyle birlikte döndür (join veya iki sorgu da yapabilirsiniz).
+    Yoksa None döndür.
+    """
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # Burada basitçe hakem_id, Hakem tablosundan ad, uzmanlık bilgisini join ile çekiyoruz
+    query = """
+    SELECT 
+        Degerlendirme.id AS deg_id,
+        Degerlendirme.makale_id,
+        Degerlendirme.hakem_id,
+        Hakem.ad AS hakem_ad,
+        Hakem.uzmanlik AS hakem_uzmanlik,
+        Degerlendirme.degerlendirme_metin,
+        Degerlendirme.tarih
+    FROM Degerlendirme
+    JOIN Hakem ON Degerlendirme.hakem_id = Hakem.id
+    WHERE Degerlendirme.makale_id = ?
+    """
+    cursor.execute(query, (makale_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row:
+        return {
+            "deg_id": row["deg_id"],
+            "makale_id": row["makale_id"],
+            "hakem_id": row["hakem_id"],
+            "hakem_ad": row["hakem_ad"],
+            "hakem_uzmanlik": row["hakem_uzmanlik"],
+            "degerlendirme_metin": row["degerlendirme_metin"],
+            "tarih": row["tarih"]
+        }
+    else:
+        return None
+
+def get_all_reviewers():
+    """
+    Hakem tablosundaki tüm kayıtları döndürür.
+    """
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    query = "SELECT * FROM Hakem"
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def update_degerlendirme(makale_id, new_hakem_id):
+    """
+    Mevcut makaleye ait Degerlendirme kaydını günceller (hakem_id'yi değiştirir).
+    Eğer istersek makale_id'ye göre update yapabiliriz (tek atama varsa).
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = """
+    UPDATE Degerlendirme
+    SET hakem_id = ?
+    WHERE makale_id = ?
+    """
+    cursor.execute(query, (new_hakem_id, makale_id))
+    conn.commit()
+    conn.close()
+    

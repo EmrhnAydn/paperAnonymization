@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session,send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, session,send_file, jsonify
 import os
 import uuid
 from io import BytesIO 
@@ -10,8 +10,15 @@ from models import (
     get_all_makaleler, 
     get_makale_by_id,
     get_messages_by_makale_id,
-    insert_message
+    insert_message,
+    insert_degerlendirme,
+    check_assignment,
+    get_all_reviewers, 
+    update_degerlendirme
 )
+
+from expertSelector import guess_subject_area_from_db, find_best_reviewer
+
 
 app = Flask(__name__, template_folder='../frontend/templates')
 app.secret_key = "super_secret_key"
@@ -129,24 +136,138 @@ def download_pdf(makale_id):
 
 @app.route('/chat/<int:makale_id>', methods=['GET', 'POST'])
 def chat(makale_id):
-    # Makaleyi bul
     makale = get_makale_by_id(makale_id)
     if not makale:
         flash("Böyle bir makale bulunamadı!", "danger")
         return redirect(url_for('yonetici_paneli'))  # veya başka bir sayfa
 
+    # URL parametresinden rolu al (örn: ?role=admin veya ?role=author)
+    role = request.args.get('role', '')  # varsayılan boş string
+
     if request.method == 'POST':
-        # Yeni mesaj ekleme
         icerik = request.form.get('icerik')
         if icerik:
-            # Göndereni admin olarak ekliyoruz
-            insert_message(makale_id, 'admin', icerik)
+            # Gönderen = role (eğer role boşsa 'unknown' diyebilirsiniz)
+            gonderen = role if role else 'unknown'
+            insert_message(makale_id, gonderen, icerik)
             flash("Mesajınız gönderildi.", "success")
-        return redirect(url_for('chat', makale_id=makale_id))
+        return redirect(url_for('chat', makale_id=makale_id, role=role))
 
     # GET ise mesajları alıp chat ekranına gönder
     messages = get_messages_by_makale_id(makale_id)
     return render_template('chat.html', makale=makale, messages=messages)
+
+
+
+@app.route('/api/find_reviewer', methods=['POST'])
+def api_find_reviewer():
+    """
+    Ajax üzerinden gelen makale_id'yi alır, expertSelector fonksiyonlarını kullanır
+    ve JSON formatında alan/hakem bilgisini döndürür.
+    """
+    data = request.json
+    makale_id = data.get('makale_id')
+    if not makale_id:
+        return jsonify({"error": "Makale ID eksik."}), 400
+
+    # 1) Makalenin alanını belirle
+    subject_area = guess_subject_area_from_db(makale_id)
+
+    # 2) Uygun hakemi bul
+    best_hakem = find_best_reviewer(subject_area)
+
+    if best_hakem:
+        return jsonify({
+            "subject_area": subject_area,
+            "best_reviewer": {
+                "id": best_hakem["id"],
+                "ad": best_hakem["ad"],
+                "uzmanlik": best_hakem["uzmanlik"]
+            }
+        })
+    else:
+        return jsonify({
+            "subject_area": subject_area,
+            "best_reviewer": None
+        })
+
+
+
+# app.py (devamı)
+
+@app.route('/api/assign_reviewer', methods=['POST'])
+def api_assign_reviewer():
+    """
+    makale_id ve hakem_id'yi alır, Degerlendirme tablosuna kaydeder.
+    """
+    data = request.json
+    makale_id = data.get('makale_id')
+    hakem_id = data.get('hakem_id')
+
+    if not (makale_id and hakem_id):
+        return jsonify({"error": "Gerekli parametreler eksik."}), 400
+
+    # Degerlendirme tablosuna ekle
+    insert_degerlendirme(makale_id, hakem_id)
+
+    return jsonify({"message": "Hakem başarıyla atandı."})
+
+
+@app.route('/api/check_assignment', methods=['POST'])
+def api_check_assignment():
+    """
+    Ajax ile makale_id alır, check_assignment() ile daha önce atama yapılmış mı sorgular.
+    Eğer atama varsa hakem bilgilerini JSON olarak döndürür.
+    Yoksa "assigned": False döndürür.
+    """
+    data = request.json
+    makale_id = data.get('makale_id')
+    if not makale_id:
+        return jsonify({"error": "makale_id eksik"}), 400
+
+    result = check_assignment(makale_id)
+    if result:
+        return jsonify({
+            "assigned": True,
+            "hakem_id": result["hakem_id"],
+            "hakem_ad": result["hakem_ad"],
+            "hakem_uzmanlik": result["hakem_uzmanlik"],
+            "degerlendirme_metin": result["degerlendirme_metin"],
+            "tarih": result["tarih"]
+        })
+    else:
+        return jsonify({"assigned": False})
+    
+
+@app.route('/api/get_reviewers', methods=['GET'])
+def api_get_reviewers():
+    """
+    Tüm hakemleri JSON formatında döndürür.
+    Örn: [ {id: 1, ad: 'Ali', uzmanlik: 'Cyber Security'}, ... ]
+    """
+    reviewers = get_all_reviewers()
+    result = []
+    for r in reviewers:
+        result.append({
+            "id": r["id"],
+            "ad": r["ad"],
+            "uzmanlik": r["uzmanlik"]
+        })
+    return jsonify(result)
+@app.route('/api/change_reviewer', methods=['POST'])
+def api_change_reviewer():
+    """
+    Gelen makale_id için yeni bir hakem_id ile Degerlendirme tablosunu update eder.
+    """
+    data = request.json
+    makale_id = data.get("makale_id")
+    new_hakem_id = data.get("hakem_id")
+
+    if not (makale_id and new_hakem_id):
+        return jsonify({"error": "Eksik parametreler"}), 400
+
+    update_degerlendirme(makale_id, new_hakem_id)
+    return jsonify({"message": "Hakem başarıyla değiştirildi"})
 
 
     
