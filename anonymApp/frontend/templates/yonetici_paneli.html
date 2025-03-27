@@ -281,9 +281,6 @@ document.getElementById("btnChangeReviewer").addEventListener("click", function(
     alert(data.message || "Hakem başarıyla değiştirildi.");
 
     // Değişiklik sonrası atanan hakem bilgisini tekrar çekelim:
-    // (Opsiyonel) Tekrar check_assignment çağırabiliriz veya
-    // location.reload() ile sayfayı yenileyebiliriz.
-    // Burada sadece check_assignment benzeri bir yaklaşım yapalım:
     fetch('/api/check_assignment', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -292,7 +289,6 @@ document.getElementById("btnChangeReviewer").addEventListener("click", function(
     .then(r => r.json())
     .then(d => {
       if (d.assigned) {
-        // UI güncelle
         document.getElementById("assignedReviewerName").textContent = d.hakem_ad;
         document.getElementById("assignedReviewerExpertise").textContent = d.hakem_uzmanlik;
         document.getElementById("assignedDegerlendirmeMetin").textContent = d.degerlendirme_metin;
@@ -357,8 +353,6 @@ document.getElementById("btnAssignReviewer").addEventListener("click", function(
       return;
     }
     alert(data.message || "Hakem atandı!");
-    // sayfa/alan güncellemesi
-    // location.reload();
   })
   .catch(err => {
     console.error(err);
@@ -366,11 +360,45 @@ document.getElementById("btnAssignReviewer").addEventListener("click", function(
   });
 });
 
-// ================== Anonimleştirme Örneği ==================
+// ================== Anonimleştirme Kısmı ==================
 document.getElementById("btnAnonymize").addEventListener("click", function() {
   const makaleId = document.getElementById("selectedArticleId").value;
-  alert("Anonimleştirme işlemi (örnek) için makale ID: " + makaleId);
-  document.getElementById("downloadAnon").disabled = false;
+
+  // Hangi checkbox'lar seçili?
+  const anonymizeInstitutions = document.getElementById("chkInstitution").checked;
+  const anonymizePeople = document.getElementById("chkPerson").checked;
+  // (Eğer görselleri de dahil etmek istersek, 
+  //  buradaki 'chkImages' değerini de sunucuya iletebilirsin)
+
+  // Hiçbir seçim yoksa uyarı verip çıkabiliriz
+  if (!anonymizeInstitutions && !anonymizePeople) {
+    alert("Lütfen en az bir anonimleştirme seçeneği (Kurum veya Kişi) seçiniz.");
+    return;
+  }
+
+  fetch('/api/anonymize_pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      makale_id: makaleId,
+      anonymize_institutions: anonymizeInstitutions,
+      anonymize_people: anonymizePeople
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      alert("Hata: " + data.error);
+      return;
+    }
+    alert(data.message || "Anonimleştirme işlemi başarıyla tamamlandı!");
+    // Anonimleştirme başarıyla bitince Anonim PDF İndir butonunu aktif edebiliriz
+    document.getElementById("downloadAnon").disabled = false;
+  })
+  .catch(err => {
+    console.error(err);
+    alert("Anonimleştirme sırasında bir hata oluştu!");
+  });
 });
 
 // ================== Checkbox Mantığı (Tümü vs.) ==================
@@ -394,4 +422,5 @@ chkOptions.forEach(chk => {
 });
 </script>
 {% endblock %}
+
 

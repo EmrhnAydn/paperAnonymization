@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 import os
 import uuid
 from io import BytesIO 
+from anonymizer import anonymize_pdf
 
 from models import (
     insert_makale, 
@@ -14,7 +15,8 @@ from models import (
     insert_degerlendirme,
     check_assignment,
     get_all_reviewers, 
-    update_degerlendirme
+    update_degerlendirme,
+    update_anon_pdf
 )
 
 from expertSelector import guess_subject_area_from_db, find_best_reviewer
@@ -269,6 +271,54 @@ def api_change_reviewer():
     update_degerlendirme(makale_id, new_hakem_id)
     return jsonify({"message": "Hakem başarıyla değiştirildi"})
 
+
+@app.route('/api/anonymize_pdf', methods=['POST'])
+def api_anonymize_pdf():
+    data = request.json
+    makale_id = data.get('makale_id')
+    anon_institutions = data.get('anonymize_institutions', False)
+    anon_people = data.get('anonymize_people', False)
+
+    if not makale_id:
+        return jsonify({"error": "makale_id eksik"}), 400
+
+    # 1) Makaleyi veritabanından çek
+    makale = get_makale_by_id(makale_id)
+    if not makale:
+        return jsonify({"error": "Makale bulunamadı"}), 404
+
+    # 2) Orijinal PDF verisini al
+    original_pdf_bytes = makale["pdfFile"]
+
+    # 3) Anonimleştirme fonksiyonunu çağır
+    #    (16 baytlık örnek key'i sabit kullandık; istersen config'den okuyabilirsin)
+    key = "ThisIsA16ByteKey"
+    anonymized_bytes = anonymize_pdf(
+        original_pdf_bytes, 
+        key,
+        anonymize_institutions=anon_institutions,
+        anonymize_people=anon_people
+    )
+
+    # 4) Ortaya çıkan anonim PDF’yi veritabanında anonimPdf kolonuna kaydedelim
+    update_anon_pdf(makale_id, anonymized_bytes)
+
+    return jsonify({"success": True, "message": "Anonimleştirme işlemi tamamlandı."})
+
+
+@app.route('/download-anonymized/<int:makale_id>')
+def download_anonymized(makale_id):
+    makale = get_makale_by_id(makale_id)
+    if not makale or not makale['anonimPdf']:
+        flash("Anonimleştirilmiş PDF bulunamadı!", "warning")
+        return redirect(url_for('yonetici_paneli'))
+    pdf_data = makale['anonimPdf']
+    return send_file(
+        BytesIO(pdf_data),
+        as_attachment=True,
+        download_name=f"makale_{makale_id}_anonim.pdf",
+        mimetype='application/pdf'
+    )
 
     
 if __name__ == '__main__':

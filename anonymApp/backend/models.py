@@ -244,4 +244,12 @@ def update_degerlendirme(makale_id, new_hakem_id):
     cursor.execute(query, (new_hakem_id, makale_id))
     conn.commit()
     conn.close()
-    
+
+
+def update_anon_pdf(makale_id, anon_pdf_bytes):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    sql = "UPDATE Makale SET anonimPdf = ? WHERE id = ?"
+    cursor.execute(sql, (anon_pdf_bytes, makale_id))
+    conn.commit()
+    conn.close()    
