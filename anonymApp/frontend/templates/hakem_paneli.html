@@ -1,20 +1,267 @@
 {% extends "base.html" %}
-
 {% block title %}Hakem Paneli{% endblock %}
 
 {% block content %}
 <div class="container mt-5">
-    <h2>Makale Değerlendirme</h2>
-    <form>
-        <div class="mb-3">
-            <label class="form-label">Anonimleştirilmiş Makale PDF</label>
-            <a href="#" class="form-control btn btn-outline-secondary">İndir</a>
+    <h2>Hakem Paneli</h2>
+    <!-- Hakem Seçim Alanı -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <label for="hakemSelect" class="form-label">Hakemi Seçiniz:</label>
+            <select id="hakemSelect" class="form-select">
+                <option value="">-- Hakem Seçin --</option>
+                {% if reviewers %}
+                    {% for hakem in reviewers %}
+                        <option value="{{ hakem.id }}">
+                            {{ hakem.id }} - {{ hakem.ad }} ({{ hakem.uzmanlik }})
+                        </option>
+                    {% endfor %}
+                {% endif %}
+            </select>
         </div>
-        <div class="mb-3">
-            <label for="comments" class="form-label">Değerlendirme Yorumları</label>
-            <textarea class="form-control" id="comments" rows="6" placeholder="Yorumlarınızı buraya giriniz"></textarea>
+        <div class="col-md-2 d-flex align-items-end">
+            <button id="btnShowHakemPanel" class="btn btn-primary">Gir</button>
         </div>
-        <button type="submit" class="btn btn-primary">Değerlendirmeyi Gönder</button>
-    </form>
+    </div>
+
+    <!-- Hakem Paneli: Seçili hakeme atanmış makaleler -->
+    <div id="hakemPanel" class="mt-4" style="display: none;">
+        <h4>Bu Hakeme Atanmış Makaleler</h4>
+        <table class="table table-bordered" id="makalelerTable">
+            <thead>
+                <tr>
+                    <th>Makale ID</th>
+                    <th>Başlık</th>
+                    <th>İndir</th>
+                    <th>Değerlendir</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- JavaScript ile doldurulacak -->
+            </tbody>
+        </table>
+    </div>
 </div>
+
+<!-- Değerlendirme Modal Penceresi -->
+<div class="modal fade" id="degerlendirModal" tabindex="-1" aria-labelledby="degerlendirModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="degerlendirModalLabel">Makale Değerlendirme</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="degerlendirmeText" class="form-label">Değerlendirme Notu:</label>
+            <textarea class="form-control" id="degerlendirmeText" rows="4" placeholder="Değerlendirme notunuzu buraya girin..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <!-- Revize İste Butonu -->
+          <button type="button" id="btnRevizeIste" class="btn btn-secondary" data-bs-dismiss="modal">Revize İste</button>
+          <!-- Sonuçlandır Butonu -->
+          <button type="button" id="btnSonuclandir" class="btn btn-primary" data-bs-dismiss="modal">Sonuçlandır</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+
+<script>
+let currentMakaleId = null;  // Şu an değerlendirmeye açılan makale ID'si
+
+document.addEventListener('DOMContentLoaded', function () {
+    // Modal açıldığında metin alanını temizle
+    var degerlendirModalEl = document.getElementById('degerlendirModal');
+    degerlendirModalEl.addEventListener('show.bs.modal', function () {
+        document.getElementById('degerlendirmeText').value = "";
+    });
+
+    // Revize İste butonuna tıklanırsa AJAX ile revize talebi gönder
+    document.getElementById('btnRevizeIste').addEventListener('click', function() {
+        const degerlendirmeText = document.getElementById('degerlendirmeText').value;
+        if (!currentMakaleId) {
+            console.error("Makale ID bilgisi eksik.");
+            return;
+        }
+        // AJAX isteği ile revize talebi gönderiliyor (değerlendirme metni güncelleniyor)
+        fetch('/api/request_revision', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                makale_id: currentMakaleId,
+                degerlendirme_text: degerlendirmeText
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log("Revize talebi gönderildi:", data);
+            // Revize talebi iletildikten sonra ilgili satırdaki "Değerlendir" butonu devre dışı bırakılabilir.
+            document.querySelector(`button[data-makale-id="${currentMakaleId}"]`).disabled = true;
+        })
+        .catch(err => console.error("Hata:", err));
+    });
+
+    const btnShowHakemPanel = document.getElementById('btnShowHakemPanel');
+    const hakemSelect = document.getElementById('hakemSelect');
+    const hakemPanel = document.getElementById('hakemPanel');
+    const makalelerTableBody = document.querySelector('#makalelerTable tbody');
+
+    btnShowHakemPanel.addEventListener('click', function() {
+        const selectedHakemId = hakemSelect.value;
+        if (!selectedHakemId) {
+            alert("Lütfen bir hakem seçiniz!");
+            return;
+        }
+
+        // Seçilen hakeme ait makaleleri getir (API, her makale için "durum" bilgisini de döndürüyor)
+        fetch(`/api/get_assigned_makaleler/${selectedHakemId}`)
+            .then(response => response.json())
+            .then(data => {
+                makalelerTableBody.innerHTML = ""; // Tabloyu temizle
+                if (data.length === 0) {
+                    makalelerTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="text-center">Bu hakeme atanmış makale bulunmamaktadır.</td>
+                        </tr>`;
+                } else {
+                    data.forEach(item => {
+                        const row = document.createElement('tr');
+
+                        // Makale ID
+                        const tdId = document.createElement('td');
+                        tdId.textContent = item.makale_id;
+                        row.appendChild(tdId);
+
+                        // Başlık
+                        const tdBaslik = document.createElement('td');
+                        tdBaslik.textContent = item.baslik || "N/A";
+                        row.appendChild(tdBaslik);
+
+                        // Anonim PDF İndir Butonu
+                        const tdDownload = document.createElement('td');
+                        if (item.anonim_pdf_exists) {
+                            const downloadLink = document.createElement('a');
+                            downloadLink.href = `/download-anonymized/${item.makale_id}`;
+                            downloadLink.textContent = "İndir";
+                            downloadLink.classList.add('btn', 'btn-outline-primary', 'btn-sm');
+                            tdDownload.appendChild(downloadLink);
+                        } else {
+                            tdDownload.textContent = "Anonim PDF Yok";
+                        }
+                        row.appendChild(tdDownload);
+
+                        // Değerlendir Butonu
+                        // Değerlendir Butonu
+const tdDegerlendir = document.createElement('td');
+const btnDegerlendir = document.createElement('button');
+btnDegerlendir.textContent = "Değerlendir";
+btnDegerlendir.classList.add('btn', 'btn-success', 'btn-sm');
+// Makale ID'sini data attribute olarak ekleyelim
+btnDegerlendir.setAttribute('data-makale-id', item.makale_id);
+
+// Eğer makalenin durumu "Revised Uploaded" veya yeniden anonimleştirilmişse (anonim_pdf_exists true)
+// then değerlendirme butonu aktif olsun.
+if(item.durum === "Revised Uploaded" || item.anonim_pdf_exists) {
+    btnDegerlendir.disabled = false;
+    btnDegerlendir.title = "Revize makale indirip değerlendirme yapabilirsiniz.";
+    btnDegerlendir.setAttribute('data-bs-toggle', 'modal');
+    btnDegerlendir.setAttribute('data-bs-target', '#degerlendirModal');
+    btnDegerlendir.addEventListener('click', function(){
+        currentMakaleId = item.makale_id;
+        console.log("Değerlendirme için (Revized/Anonimized) Makale ID:", currentMakaleId);
+    });
+} else if(item.durum === "Conclusion") {
+    // Makale sonuçlandırıldıysa buton devre dışı
+    btnDegerlendir.disabled = true;
+    btnDegerlendir.textContent = "Sonuçlandı";
+    btnDegerlendir.title = "Bu makale sonuçlandırılmıştır.";
+} 
+// Eğer değerlendirme notu daha önce iletilmişse (ve "Atama yapıldı" değilse)
+// butonu devre dışı bırakıyoruz.
+else if(item.degerlendirme_metin && item.degerlendirme_metin !== "Atama yapıldı"){
+    btnDegerlendir.disabled = true;
+    btnDegerlendir.title = "Bu makale için değerlendirme zaten iletilmiş.";
+} 
+// Diğer durumlarda normal modal açılmasını sağlayalım.
+else {
+    btnDegerlendir.setAttribute('data-bs-toggle', 'modal');
+    btnDegerlendir.setAttribute('data-bs-target', '#degerlendirModal');
+    btnDegerlendir.addEventListener('click', function(){
+        currentMakaleId = item.makale_id;
+        console.log("Değerlendirme için Makale ID:", currentMakaleId);
+    });
+}
+tdDegerlendir.appendChild(btnDegerlendir);
+row.appendChild(tdDegerlendir);
+
+
+                        makalelerTableBody.appendChild(row);
+                    });
+                }
+                // Paneli görünür yap
+                hakemPanel.style.display = 'block';
+            })
+            .catch(err => {
+                console.error("Hata oluştu:", err);
+            });
+    });
+});
+// Revize İste butonunun event listener'ı mevcutsa, şimdi "Sonuçlandır" için de ekleyelim:
+document.getElementById('btnSonuclandir').addEventListener('click', function() {
+    const degerlendirmeText = document.getElementById('degerlendirmeText').value;
+    if (!currentMakaleId) {
+        console.error("Makale ID bilgisi eksik.");
+        return;
+    }
+    // API'ye POST isteği gönderiyoruz.
+    fetch('/api/complete_evaluation', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            makale_id: currentMakaleId,
+            degerlendirme_text: degerlendirmeText
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log("Makale sonuçlandırıldı:", data);
+        // İşlem başarılıysa, hakem panelindeki ilgili "Değerlendir" butonunu devre dışı bırakıp metnini "Sonuçlandı" yapıyoruz.
+        const btn = document.querySelector(`button[data-makale-id="${currentMakaleId}"]`);
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = "Sonuçlandı";
+            btn.title = "Bu makale sonuçlandırılmıştır.";
+        }
+    })
+    .catch(err => console.error("Hata:", err));
+});
+
+    // API'ye POST isteği gönderiyoruz.
+    fetch('/api/complete_evaluation', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            makale_id: currentMakaleId,
+            degerlendirme_text: degerlendirmeText
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log("Makale sonuçlandırıldı:", data);
+        // İşlem başarılıysa, hakem panelindeki ilgili "Değerlendir" butonunu devre dışı bırakıyoruz.
+        const btn = document.querySelector(`button[data-makale-id="${currentMakaleId}"]`);
+        if(btn) {
+            btn.disabled = true;
+            btn.title = "Bu makale sonuçlandırılmıştır.";
+        }
+    })
+    .catch(err => console.error("Hata:", err));
+
+
+
+</script>
 {% endblock %}

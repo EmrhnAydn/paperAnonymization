@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Revize Makale Yükle{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Revize Makale Yükle</h2>
+
+    <!-- Eğer revize_notu varsa ekranda göster -->
+    {% if revize_notu %}
+      <div class="alert alert-info">
+        <strong>Hakem Revize Notu:</strong> {{ revize_notu }}
+      </div>
+    {% endif %}
+
+    <!-- Revize yükleme formu -->
+    <form method="POST" enctype="multipart/form-data">
+        <div class="mb-3">
+            <label for="takip_numarasi" class="form-label">Takip Numarası:</label>
+            <input type="text" class="form-control" name="takip_numarasi" 
+                   id="takip_numarasi" value="{{ takip_numarasi }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="email" class="form-label">E-posta:</label>
+            <input type="email" class="form-control" name="email" 
+                   id="email" value="{{ email }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="pdf_file" class="form-label">Revize PDF Dosyası:</label>
+            <input type="file" class="form-control" name="pdf_file" id="pdf_file" 
+                   accept="application/pdf" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Yükle</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Makale Sonucu{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <h2>Makale Sonucu</h2>
+    <div>
+        <p><strong>Makale ID:</strong> {{ makale['id'] }}</p>
+        <p><strong>Başlık:</strong> {{ makale['baslik'] }}</p>
+        <p><strong>Durum:</strong> {{ makale['durum'] }}</p>
+    </div>
+    <div class="mt-4">
+        <h4>Değerlendirme Notu</h4>
+        <p>{{ evaluation_text }}</p>
+    </div>
+</div>
+{% endblock %}

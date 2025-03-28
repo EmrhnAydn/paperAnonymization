@@ -253,3 +253,74 @@ def update_anon_pdf(makale_id, anon_pdf_bytes):
     cursor.execute(sql, (anon_pdf_bytes, makale_id))
     conn.commit()
     conn.close()    
+
+
+def get_assigned_makaleler_for_hakem(hakem_id):
+    """
+    Belirtilen hakem_id için, hakem ataması yapılmış makaleleri,
+    makale başlığı, değerlendirme metni, değerlendirme tarihi ve anonim PDF bilgisini getirir.
+    """
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    query = """
+    SELECT 
+        m.id AS makale_id,
+        m.baslik AS makale_baslik,
+        d.degerlendirme_metin,
+        d.tarih AS degerlendirme_tarih,
+        m.anonimPdf AS anon_pdf
+    FROM Makale m
+    JOIN Degerlendirme d ON m.id = d.makale_id
+    WHERE d.hakem_id = ?
+    """
+    cursor.execute(query, (hakem_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def update_evaluation_text(makale_id, new_text):
+    """
+    Belirtilen makale için Degerlendirme tablosundaki degerlendirme_metin alanını günceller.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    query = "UPDATE Degerlendirme SET degerlendirme_metin = ? WHERE makale_id = ?"
+    cursor.execute(query, (new_text, makale_id))
+    conn.commit()
+    conn.close()
+
+def update_makale_status(makale_id, new_status):
+    """
+    Belirtilen makale için durum (durum) kolonunu günceller.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    query = "UPDATE Makale SET durum = ? WHERE id = ?"
+    cursor.execute(query, (new_status, makale_id))
+    conn.commit()
+    conn.close()
+
+def update_makale_pdf(takip_numarasi, email, new_pdf_data, new_status):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    # Burada anonimPdf alanını da NULL yaparak, revize edilen makale ile eski anonim PDF'yi temizliyoruz.
+    query = "UPDATE Makale SET pdfFile = ?, durum = ?, anonimPdf = NULL WHERE takip_numarasi = ? AND email = ?"
+    cursor.execute(query, (new_pdf_data, new_status, takip_numarasi, email))
+    conn.commit()
+    conn.close()
+
+
+def get_evaluation_by_makale_id(makale_id):
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    query = "SELECT degerlendirme_metin FROM Degerlendirme WHERE makale_id = ?"
+    cursor.execute(query, (makale_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+

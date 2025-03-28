@@ -16,7 +16,11 @@ from models import (
     check_assignment,
     get_all_reviewers, 
     update_degerlendirme,
-    update_anon_pdf
+    update_anon_pdf,
+    update_evaluation_text,
+    update_makale_status,
+    update_makale_pdf,
+    get_evaluation_by_makale_id
 )
 
 from expertSelector import guess_subject_area_from_db, find_best_reviewer
@@ -69,22 +73,47 @@ def makale_yukle():
 
 @app.route('/makale-durumu', methods=['GET', 'POST'])
 def makale_durumu():
-    """
-    Sadece makale sorgulama işlevi.
-    """
     makale = None
-
+    evaluation = None
+    
     if request.method == 'POST':
-        # Makale Sorgulama
-        takip_numarasi = request.form.get('takip_numarasi')
-        email = request.form.get('email')
+        # Eğer revize PDF yükleniyorsa:
+        if 'revize_pdf' in request.files:
+            takip_numarasi = request.form.get('takip_numarasi')
+            email = request.form.get('email')
+            pdf_file = request.files.get('revize_pdf')
 
-        makale = get_makale_by_takip_no_and_email(takip_numarasi, email)
-        if not makale:
-            flash("Bu bilgilere ait bir makale bulunamadı!", "danger")
-            return redirect(url_for('makale_durumu'))
+            if not pdf_file:
+                flash("Lütfen revize PDF dosyası yükleyiniz.", "warning")
+                return redirect(url_for('makale_durumu'))
 
-    return render_template('makale_durum_sorgulama.html', makale=makale)
+            pdf_data = pdf_file.read()
+            update_makale_pdf(takip_numarasi, email, pdf_data, "Revised Uploaded")
+            flash("Revize edilmiş makale başarıyla yüklendi!", "success")
+
+            makale = get_makale_by_takip_no_and_email(takip_numarasi, email)
+
+        # Yoksa normal sorgulama formu gönderilmişse:
+        else:
+            takip_numarasi = request.form.get('takip_numarasi')
+            email = request.form.get('email')
+            makale = get_makale_by_takip_no_and_email(takip_numarasi, email)
+            if not makale:
+                flash("Bu bilgilere ait bir makale bulunamadı!", "danger")
+                return redirect(url_for('makale_durumu'))
+
+    # Makale bulunduysa değerlendirme tablosundan notu çek
+    if makale:
+        evaluation_row = get_evaluation_by_makale_id(makale['id'])
+        if evaluation_row:
+            evaluation = evaluation_row["degerlendirme_metin"]
+
+    # Template'e gönder
+    return render_template('makale_durum_sorgulama.html', makale=makale, evaluation=evaluation)
+
+
+
+
 
 @app.route('/yonetici')
 def yonetici_paneli():
@@ -95,7 +124,8 @@ def yonetici_paneli():
 
 @app.route('/hakem')
 def hakem_paneli():
-    return render_template('hakem_paneli.html')
+    reviewers = get_all_reviewers()  # Veritabanından tüm hakemleri al
+    return render_template('hakem_paneli.html', reviewers=reviewers)
 
 @app.route('/makale-sorgula', methods=['GET', 'POST'])
 def makale_sorgula():
@@ -320,6 +350,125 @@ def download_anonymized(makale_id):
         mimetype='application/pdf'
     )
 
+
+@app.route('/api/get_assigned_makaleler/<int:hakem_id>', methods=['GET'])
+def api_get_assigned_makaleler(hakem_id):
+    """
+    Belirtilen hakeme atanmış makalelerin listesini JSON olarak döndürür.
+    """
+    from models import get_assigned_makaleler_for_hakem
+    makaleler = get_assigned_makaleler_for_hakem(hakem_id)
+    result = [
+        {
+            "makale_id": row["makale_id"],
+            "baslik": row["makale_baslik"],
+            "degerlendirme_metin": row["degerlendirme_metin"],
+            "tarih": row["degerlendirme_tarih"],
+            "anonim_pdf_exists": bool(row["anon_pdf"])
+        }
+        for row in makaleler
+    ]
+    return jsonify(result)
+
+@app.route('/api/request_revision', methods=['POST'])
+def api_request_revision():
+    """
+    Hakem revize talebi gönderdiğinde:
+     - Degerlendirme tablosundaki degerlendirme_metin alanını günceller.
+     - Makale tablosundaki durum değerini "Request a Revision" yapar.
+    """
+    data = request.json
+    makale_id = data.get('makale_id')
+    degerlendirme_text = data.get('degerlendirme_text')
     
+    if not (makale_id and degerlendirme_text is not None):
+        return jsonify({"error": "Eksik parametreler"}), 400
+
+    # Değerlendirme kaydını güncelle
+    update_evaluation_text(makale_id, degerlendirme_text)
+    # Makale durumunu "Request a Revision" olarak güncelle
+    update_makale_status(makale_id, "Request a Revision")
+    
+    return jsonify({"message": "Revize talebi iletildi."})
+    
+@app.route('/revize-yukle', methods=['GET', 'POST'])
+def revize_yukle():
+    """
+    Revize edilmiş makaleyi yüklemek için ayrı bir ekran.
+    GET isteğinde takip_numarasi ve email query parametreleriyle form önceden doldurulabilir.
+    POST isteğinde PDF dosyası alınıp makale kaydı güncellenir.
+    """
+    revize_notu = None  # Hakemin yazdığı değerlendirme metnini burada tutacağız
+    makale = None
+    
+    if request.method == 'POST':
+        takip_numarasi = request.form.get('takip_numarasi')
+        email = request.form.get('email')
+        pdf_file = request.files.get('pdf_file')
+
+        if not pdf_file:
+            flash("Lütfen revize PDF dosyası yükleyiniz.", "warning")
+            return redirect(url_for('revize_yukle'))
+
+        pdf_data = pdf_file.read()
+        # Revize dosyayı güncelle, durumunu "Revised Uploaded" yap
+        update_makale_pdf(takip_numarasi, email, pdf_data, "Revised Uploaded")
+        flash("Revize edilmiş makale başarıyla yüklendi!", "success")
+
+        # İşlem bitince durumu görebilmesi için makale_durumu sayfasına yönlendir
+        return redirect(url_for('makale_durumu'))
+    
+    else:
+        # GET isteği: takip_numarasi ve email query parametrelerinden gelebilir
+        takip_numarasi = request.args.get('takip_numarasi', '')
+        email = request.args.get('email', '')
+
+        # Eğer takip_numarasi ve email doluysa veritabanından makaleyi bul
+        if takip_numarasi and email:
+            makale = get_makale_by_takip_no_and_email(takip_numarasi, email)
+            if makale:
+                # Değerlendirme tablosundan revize notunu çek
+                evaluation_row = get_evaluation_by_makale_id(makale['id'])
+                if evaluation_row:
+                    revize_notu = evaluation_row["degerlendirme_metin"]
+    
+    # revize_yukle.html'e makale bilgilerini ve revize notunu gönder
+    return render_template(
+        'revize_yukle.html',
+        takip_numarasi=takip_numarasi,
+        email=email,
+        revize_notu=revize_notu
+    )
+
+@app.route('/api/complete_evaluation', methods=['POST'])
+def api_complete_evaluation():
+    """
+    Hakem, makaleyi sonuçlandırmak istediğinde:
+     - Makale tablosundaki durum "Conclusion" olarak güncellenir.
+     - Degerlendirme tablosundaki degerlendirme_metin güncellenir.
+    """
+    data = request.json
+    makale_id = data.get('makale_id')
+    degerlendirme_text = data.get('degerlendirme_text')
+    
+    if not (makale_id and degerlendirme_text is not None):
+        return jsonify({"error": "Eksik parametreler"}), 400
+
+    # Değerlendirme notunu güncelle
+    update_evaluation_text(makale_id, degerlendirme_text)
+    # Makalenin durumunu "Conclusion" yap
+    update_makale_status(makale_id, "Conclusion")
+    
+    return jsonify({"message": "Makale sonuçlandırıldı."})
+
+@app.route('/show_result/<int:makale_id>')
+def show_result(makale_id):
+    makale = get_makale_by_id(makale_id)
+    evaluation_row = get_evaluation_by_makale_id(makale_id)
+    evaluation_text = evaluation_row["degerlendirme_metin"] if evaluation_row else ""
+    return render_template('show_result.html', makale=makale, evaluation_text=evaluation_text)
+
+
+
 if __name__ == '__main__':
     app.run()
