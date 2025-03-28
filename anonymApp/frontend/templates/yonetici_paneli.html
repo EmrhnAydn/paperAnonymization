@@ -43,6 +43,9 @@
                             data-baslik="{{ makale['baslik'] }}">
                         Atama işlemleri
                     </button>
+                    <button class="btn btn-secondary btn-sm btnLogs" data-makaleid="{{ makale['id'] }}">
+                      Loglar
+                  </button>
                 </td>
             </tr>
             {% endfor %}
@@ -151,6 +154,27 @@
     </div>
   </div>
 </div>
+
+<!-- Loglar Modal -->
+<div class="modal fade" id="logsModal" tabindex="-1" aria-labelledby="logsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="logsModalLabel">Makale Logları</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body">
+        <div id="logsContainer">
+          <!-- Log kayıtları burada gösterilecek -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -367,12 +391,11 @@ document.getElementById("btnAnonymize").addEventListener("click", function() {
   // Hangi checkbox'lar seçili?
   const anonymizeInstitutions = document.getElementById("chkInstitution").checked;
   const anonymizePeople = document.getElementById("chkPerson").checked;
-  // (Eğer görselleri de dahil etmek istersek, 
-  //  buradaki 'chkImages' değerini de sunucuya iletebilirsin)
+  const anonymizeImages = document.getElementById("chkImages").checked; // Görseller
 
-  // Hiçbir seçim yoksa uyarı verip çıkabiliriz
-  if (!anonymizeInstitutions && !anonymizePeople) {
-    alert("Lütfen en az bir anonimleştirme seçeneği (Kurum veya Kişi) seçiniz.");
+  // En az bir seçeneğin seçili olduğundan emin olalım
+  if (!anonymizeInstitutions && !anonymizePeople && !anonymizeImages) {
+    alert("Lütfen en az bir anonimleştirme seçeneği seçiniz.");
     return;
   }
 
@@ -382,7 +405,8 @@ document.getElementById("btnAnonymize").addEventListener("click", function() {
     body: JSON.stringify({
       makale_id: makaleId,
       anonymize_institutions: anonymizeInstitutions,
-      anonymize_people: anonymizePeople
+      anonymize_people: anonymizePeople,
+      anonymize_images: anonymizeImages
     })
   })
   .then(response => response.json())
@@ -392,7 +416,7 @@ document.getElementById("btnAnonymize").addEventListener("click", function() {
       return;
     }
     alert(data.message || "Anonimleştirme işlemi başarıyla tamamlandı!");
-    // Anonimleştirme başarıyla bitince Anonim PDF İndir butonunu aktif edebiliriz
+    // İşlem bitince anonim PDF indir butonunu aktif edebilirsiniz
     document.getElementById("downloadAnon").disabled = false;
   })
   .catch(err => {
@@ -400,6 +424,7 @@ document.getElementById("btnAnonymize").addEventListener("click", function() {
     alert("Anonimleştirme sırasında bir hata oluştu!");
   });
 });
+
 
 // ================== Checkbox Mantığı (Tümü vs.) ==================
 const chkAll = document.getElementById("chkAll");
@@ -420,6 +445,47 @@ chkOptions.forEach(chk => {
     }
   });
 });
+
+document.querySelectorAll('.btnLogs').forEach(button => {
+    button.addEventListener('click', function() {
+        const makaleId = this.getAttribute('data-makaleid');
+        const logsContainer = document.getElementById('logsContainer');
+        logsContainer.innerHTML = 'Yükleniyor...';
+
+        fetch('/api/get_logs', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ makale_id: makaleId })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                logsContainer.innerHTML = `<p>Hata: ${data.error}</p>`;
+            } else {
+                if (data.length === 0) {
+                    logsContainer.innerHTML = '<p>Log kaydı bulunamadı.</p>';
+                } else {
+                    let html = '<ul class="list-group">';
+                    data.forEach(log => {
+                        html += `<li class="list-group-item">${log.tarih} | ${log.mesaj}</li>`;
+                    });
+                    html += '</ul>';
+                    logsContainer.innerHTML = html;
+                }
+            }
+            // Modalı aç
+            var logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
+            logsModal.show();
+        })
+        .catch(error => {
+            logsContainer.innerHTML = `<p>Hata oluştu: ${error}</p>`;
+            var logsModal = new bootstrap.Modal(document.getElementById('logsModal'));
+            logsModal.show();
+        });
+    });
+});
+
+
 </script>
 {% endblock %}
 

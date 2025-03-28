@@ -20,7 +20,9 @@ from models import (
     update_evaluation_text,
     update_makale_status,
     update_makale_pdf,
-    get_evaluation_by_makale_id
+    get_evaluation_by_makale_id,
+    get_logs_by_makale_id,
+    insert_log,
 )
 
 from expertSelector import guess_subject_area_from_db, find_best_reviewer
@@ -50,7 +52,17 @@ def makale_yukle():
         file_size = len(pdf_data)
         takip_numarasi = str(uuid.uuid4())[:8]
 
+        # Makale kaydını ekle
         insert_makale(takip_numarasi, email, baslik, pdf_data)
+
+        # Eklenen makaleyi takip numarası ve email ile sorgulayarak makale_id'yi alalım
+        makale = get_makale_by_takip_no_and_email(takip_numarasi, email)
+        if makale:
+            makale_id = makale['id']
+            # Log kaydı ekleyelim
+            insert_log(makale_id, f"Makale yüklendi: {baslik}")
+        else:
+            flash("Makale bulunamadı, log eklenemedi.", "warning")
 
         flash("Makale başarıyla yüklendi!", "success")
         session['last_upload'] = {
@@ -69,6 +81,7 @@ def makale_yukle():
     return render_template('makale_yukleme.html',
                            takip_numarasi=takip_numarasi,
                            file_size=file_size)
+
 
 
 @app.route('/makale-durumu', methods=['GET', 'POST'])
@@ -241,7 +254,7 @@ def api_assign_reviewer():
 
     # Degerlendirme tablosuna ekle
     insert_degerlendirme(makale_id, hakem_id)
-
+    insert_log(makale_id, f"Hakem atandı: {hakem_id}")
     return jsonify({"message": "Hakem başarıyla atandı."})
 
 
@@ -299,41 +312,11 @@ def api_change_reviewer():
         return jsonify({"error": "Eksik parametreler"}), 400
 
     update_degerlendirme(makale_id, new_hakem_id)
+    insert_log(makale_id, f"Hakem değiştirildi: {new_hakem_id}")    
     return jsonify({"message": "Hakem başarıyla değiştirildi"})
 
 
-@app.route('/api/anonymize_pdf', methods=['POST'])
-def api_anonymize_pdf():
-    data = request.json
-    makale_id = data.get('makale_id')
-    anon_institutions = data.get('anonymize_institutions', False)
-    anon_people = data.get('anonymize_people', False)
 
-    if not makale_id:
-        return jsonify({"error": "makale_id eksik"}), 400
-
-    # 1) Makaleyi veritabanından çek
-    makale = get_makale_by_id(makale_id)
-    if not makale:
-        return jsonify({"error": "Makale bulunamadı"}), 404
-
-    # 2) Orijinal PDF verisini al
-    original_pdf_bytes = makale["pdfFile"]
-
-    # 3) Anonimleştirme fonksiyonunu çağır
-    #    (16 baytlık örnek key'i sabit kullandık; istersen config'den okuyabilirsin)
-    key = "ThisIsA16ByteKey"
-    anonymized_bytes = anonymize_pdf(
-        original_pdf_bytes, 
-        key,
-        anonymize_institutions=anon_institutions,
-        anonymize_people=anon_people
-    )
-
-    # 4) Ortaya çıkan anonim PDF’yi veritabanında anonimPdf kolonuna kaydedelim
-    update_anon_pdf(makale_id, anonymized_bytes)
-
-    return jsonify({"success": True, "message": "Anonimleştirme işlemi tamamlandı."})
 
 
 @app.route('/download-anonymized/<int:makale_id>')
@@ -388,7 +371,7 @@ def api_request_revision():
     update_evaluation_text(makale_id, degerlendirme_text)
     # Makale durumunu "Request a Revision" olarak güncelle
     update_makale_status(makale_id, "Request a Revision")
-    
+    insert_log(makale_id, "Revize talebi gönderildi.")
     return jsonify({"message": "Revize talebi iletildi."})
     
 @app.route('/revize-yukle', methods=['GET', 'POST'])
@@ -458,7 +441,7 @@ def api_complete_evaluation():
     update_evaluation_text(makale_id, degerlendirme_text)
     # Makalenin durumunu "Conclusion" yap
     update_makale_status(makale_id, "Conclusion")
-    
+    insert_log(makale_id, "Makale sonuçlandırıldı.")
     return jsonify({"message": "Makale sonuçlandırıldı."})
 
 @app.route('/show_result/<int:makale_id>')
@@ -467,6 +450,60 @@ def show_result(makale_id):
     evaluation_row = get_evaluation_by_makale_id(makale_id)
     evaluation_text = evaluation_row["degerlendirme_metin"] if evaluation_row else ""
     return render_template('show_result.html', makale=makale, evaluation_text=evaluation_text)
+
+@app.route('/api/anonymize_pdf', methods=['POST'])
+def api_anonymize_pdf():
+    data = request.json
+    makale_id = data.get('makale_id')
+    anon_institutions = data.get('anonymize_institutions', False)
+    anon_people = data.get('anonymize_people', False)
+    anonymize_images = data.get('anonymize_images', False)
+    
+    if not makale_id:
+        return jsonify({"error": "makale_id eksik"}), 400
+    
+    # 1) Makaleyi veritabanından çekme
+    makale = get_makale_by_id(makale_id)
+    if not makale:
+        return jsonify({"error": "Makale bulunamadı"}), 404
+    
+    original_pdf_bytes = makale["pdfFile"]
+    
+    # 2) Görseller checkbox'ı işaretlendiyse pdfBluring.py kullan
+    if anonymize_images:
+        from pdfBluring import blur_pdf_images
+        anonymized_bytes = blur_pdf_images(original_pdf_bytes)
+    else:
+        # Diğer anonimleştirme işlemleri (örneğin kurum ve kişi bilgileri)
+        key = "ThisIsA16ByteKey"
+        anonymized_bytes = anonymize_pdf(
+            original_pdf_bytes, 
+            key,
+            anonymize_institutions=anon_institutions,
+            anonymize_people=anon_people
+        )
+    
+    # 3) Ortaya çıkan anonim PDF’yi veritabanında anonimPdf kolonuna kaydetme
+    update_anon_pdf(makale_id, anonymized_bytes)
+    
+    return jsonify({"success": True, "message": "Anonimleştirme işlemi tamamlandı."})
+
+@app.route('/api/get_logs', methods=['POST'])
+def api_get_logs():
+    data = request.json
+    makale_id = data.get('makale_id')
+    if not makale_id:
+        return jsonify({"error": "makale_id eksik"}), 400
+
+    logs = get_logs_by_makale_id(makale_id)
+    result = []
+    for row in logs:
+        result.append({
+            "tarih": row["tarih"],
+            "mesaj": row["mesaj"]
+        })
+    return jsonify(result)
+
 
 
 

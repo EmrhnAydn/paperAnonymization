@@ -322,5 +322,30 @@ def get_evaluation_by_makale_id(makale_id):
     conn.close()
     return row
 
+def get_logs_by_makale_id(makale_id):
+    """
+    Belirtilen makale_id ile logKayitlari tablosundaki tüm kayıtları
+    (tarih ve mesaj bilgilerini) tarih sırasına göre döndürür.
+    """
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row  # satırları sözlük gibi erişilebilir yapar
+    cursor = conn.cursor()
+    query = "SELECT tarih, mesaj FROM LogKayitlari WHERE makale_id = ? ORDER BY tarih ASC"
+    cursor.execute(query, (makale_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def insert_log(makale_id, mesaj):
+    """
+    Belirtilen makale_id için logKayitlari tablosuna bir kayıt ekler.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    query = "INSERT INTO LogKayitlari (makale_id, mesaj) VALUES (?, ?)"
+    cursor.execute(query, (makale_id, mesaj))
+    conn.commit()
+    conn.close()
+
 
 
