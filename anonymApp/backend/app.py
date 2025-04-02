@@ -336,15 +336,13 @@ def download_anonymized(makale_id):
 
 @app.route('/api/get_assigned_makaleler/<int:hakem_id>', methods=['GET'])
 def api_get_assigned_makaleler(hakem_id):
-    """
-    Belirtilen hakeme atanmış makalelerin listesini JSON olarak döndürür.
-    """
     from models import get_assigned_makaleler_for_hakem
     makaleler = get_assigned_makaleler_for_hakem(hakem_id)
     result = [
         {
             "makale_id": row["makale_id"],
             "baslik": row["makale_baslik"],
+            "durum": row["durum"],  # <-- DURUM ALANI EKLENDİ
             "degerlendirme_metin": row["degerlendirme_metin"],
             "tarih": row["degerlendirme_tarih"],
             "anonim_pdf_exists": bool(row["anon_pdf"])
@@ -353,13 +351,9 @@ def api_get_assigned_makaleler(hakem_id):
     ]
     return jsonify(result)
 
+
 @app.route('/api/request_revision', methods=['POST'])
 def api_request_revision():
-    """
-    Hakem revize talebi gönderdiğinde:
-     - Degerlendirme tablosundaki degerlendirme_metin alanını günceller.
-     - Makale tablosundaki durum değerini "Request a Revision" yapar.
-    """
     data = request.json
     makale_id = data.get('makale_id')
     degerlendirme_text = data.get('degerlendirme_text')
@@ -367,12 +361,12 @@ def api_request_revision():
     if not (makale_id and degerlendirme_text is not None):
         return jsonify({"error": "Eksik parametreler"}), 400
 
-    # Değerlendirme kaydını güncelle
     update_evaluation_text(makale_id, degerlendirme_text)
-    # Makale durumunu "Request a Revision" olarak güncelle
-    update_makale_status(makale_id, "Request a Revision")
-    insert_log(makale_id, "Revize talebi gönderildi.")
-    return jsonify({"message": "Revize talebi iletildi."})
+    # Durumu "Request a Revision" yerine onay bekliyor şeklinde güncelliyoruz
+    update_makale_status(makale_id, "Pending Revision Approval")
+    insert_log(makale_id, "Revize talebi gönderildi, onay bekliyor.")
+    return jsonify({"message": "Revize talebi onay için gönderildi."})
+
     
 @app.route('/revize-yukle', methods=['GET', 'POST'])
 def revize_yukle():
@@ -425,11 +419,6 @@ def revize_yukle():
 
 @app.route('/api/complete_evaluation', methods=['POST'])
 def api_complete_evaluation():
-    """
-    Hakem, makaleyi sonuçlandırmak istediğinde:
-     - Makale tablosundaki durum "Conclusion" olarak güncellenir.
-     - Degerlendirme tablosundaki degerlendirme_metin güncellenir.
-    """
     data = request.json
     makale_id = data.get('makale_id')
     degerlendirme_text = data.get('degerlendirme_text')
@@ -437,12 +426,11 @@ def api_complete_evaluation():
     if not (makale_id and degerlendirme_text is not None):
         return jsonify({"error": "Eksik parametreler"}), 400
 
-    # Değerlendirme notunu güncelle
     update_evaluation_text(makale_id, degerlendirme_text)
-    # Makalenin durumunu "Conclusion" yap
-    update_makale_status(makale_id, "Conclusion")
-    insert_log(makale_id, "Makale sonuçlandırıldı.")
-    return jsonify({"message": "Makale sonuçlandırıldı."})
+    # Durumu "Conclusion" yerine onay bekliyor şeklinde güncelliyoruz
+    update_makale_status(makale_id, "Pending Conclusion Approval")
+    insert_log(makale_id, "Makale sonuçlandırma talebi gönderildi, onay bekliyor.")
+    return jsonify({"message": "Sonuçlandırma talebi onay için gönderildi."})
 
 @app.route('/show_result/<int:makale_id>')
 def show_result(makale_id):
@@ -469,12 +457,27 @@ def api_anonymize_pdf():
     
     original_pdf_bytes = makale["pdfFile"]
     
-    # 2) Görseller checkbox'ı işaretlendiyse pdfBluring.py kullan
+    # 2) Anonimleştirme işlemleri
     if anonymize_images:
-        from pdfBluring import blur_pdf_images
-        anonymized_bytes = blur_pdf_images(original_pdf_bytes)
+        # Eğer görsel anonimleştirme diğer seçeneklerden (kurum/kişi) biriyle birlikte seçildiyse
+        if anon_institutions or anon_people:
+            key = "ThisIsA16ByteKey"
+            # Önce metin anonimleştirmesini yapıyoruz
+            temp_pdf_bytes = anonymize_pdf(
+                original_pdf_bytes, 
+                key,
+                anonymize_institutions=anon_institutions,
+                anonymize_people=anon_people
+            )
+            # Ardından görsel anonimleştirme yapılır
+            from pdfBluring import blur_pdf_images
+            anonymized_bytes = blur_pdf_images(temp_pdf_bytes)
+        else:
+            # Sadece görsel anonimleştirme yapılacaksa
+            from pdfBluring import blur_pdf_images
+            anonymized_bytes = blur_pdf_images(original_pdf_bytes)
     else:
-        # Diğer anonimleştirme işlemleri (örneğin kurum ve kişi bilgileri)
+        # Görsel anonimleştirme seçili değilse, sadece metin anonimleştirme işlemi yapılır
         key = "ThisIsA16ByteKey"
         anonymized_bytes = anonymize_pdf(
             original_pdf_bytes, 
@@ -487,6 +490,41 @@ def api_anonymize_pdf():
     update_anon_pdf(makale_id, anonymized_bytes)
     
     return jsonify({"success": True, "message": "Anonimleştirme işlemi tamamlandı."})
+
+
+
+@app.route('/api/approve_submission', methods=['POST'])
+def api_approve_submission():
+    data = request.json
+    makale_id = data.get("makale_id")
+    approval_type = data.get("type")  # "revision" veya "conclusion"
+    
+    if not makale_id or not approval_type:
+        return jsonify({"error": "Gerekli parametreler eksik."}), 400
+
+    makale = get_makale_by_id(makale_id)
+    if not makale:
+        return jsonify({"error": "Makale bulunamadı."}), 404
+
+    current_status = makale["durum"]
+    if approval_type == "revision":
+        if current_status != "Pending Revision Approval":
+            return jsonify({"error": "Bu makale için revize talebi onaylanamaz."}), 400
+        # Admin onayı verildiğinde durumu Request a Revision olarak güncelliyoruz
+        new_status = "Request a Revision"
+    elif approval_type == "conclusion":
+        if current_status != "Pending Conclusion Approval":
+            return jsonify({"error": "Bu makale için sonuçlandırma talebi onaylanamaz."}), 400
+        # Admin onayı verildiğinde durumu Conclusion olarak güncelliyoruz
+        new_status = "Conclusion"
+    else:
+        return jsonify({"error": "Geçersiz onay türü."}), 400
+
+    update_makale_status(makale_id, new_status)
+    insert_log(makale_id, f"Admin onayı ile makale '{new_status}' olarak güncellendi.")
+    return jsonify({"message": f"Makale {new_status} olarak onaylandı."})
+
+
 
 @app.route('/api/get_logs', methods=['POST'])
 def api_get_logs():

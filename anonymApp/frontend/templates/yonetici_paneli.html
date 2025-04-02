@@ -47,6 +47,19 @@
                       Loglar
                   </button>
                 </td>
+                <td>
+                  {% if makale['durum'] == "Pending Revision Approval" %}
+                        <button class="btn btn-warning btn-sm btnApprove" data-makale-id="{{ makale['id'] }}" data-type="revision">
+                            Revize İste Onayla
+                        </button>
+                    {% elif makale['durum'] == "Pending Conclusion Approval" %}
+                        <button class="btn btn-warning btn-sm btnApprove" data-makale-id="{{ makale['id'] }}" data-type="conclusion">
+                            Sonuç İlet
+                        </button>
+                    {% else %}
+                        <!-- Onay beklemeyen makalelerde onay butonu gösterilmiyor -->
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>
@@ -179,6 +192,36 @@
 
 {% block scripts %}
 <script>
+
+document.addEventListener('DOMContentLoaded', function () {
+    // Yönetici onay butonlarına tıklanma olayını ekliyoruz:
+    document.querySelectorAll('.btnApprove').forEach(function(button) {
+        button.addEventListener('click', function() {
+            const makaleId = this.getAttribute('data-makale-id');
+            const type = this.getAttribute('data-type'); // "revision" veya "conclusion"
+            fetch('/api/approve_submission', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    makale_id: makaleId,
+                    type: type
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                // Onaylandıktan sonra sayfayı yenileyerek güncel durumu gösterin
+                location.reload();
+            })
+            .catch(err => {
+                console.error("Onay hatası:", err);
+                alert("Onay sırasında bir hata oluştu.");
+            });
+        });
+    });
+  });
+
+
 const atamaModalEl = document.getElementById('atamaModal');
 atamaModalEl.addEventListener('show.bs.modal', function (event) {
   const button = event.relatedTarget;
@@ -220,6 +263,14 @@ atamaModalEl.addEventListener('show.bs.modal', function (event) {
   document.getElementById("btnAssignReviewer").style.display = 'none';
   document.getElementById("foundSubjectArea").textContent = '';
   document.getElementById("foundReviewer").textContent = '';
+
+
+
+
+
+
+
+
 
   // =========== 1) Makale Atanmış mı Kontrolü ===========
   fetch('/api/check_assignment', {

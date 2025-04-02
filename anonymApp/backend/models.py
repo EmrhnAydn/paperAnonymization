@@ -256,10 +256,6 @@ def update_anon_pdf(makale_id, anon_pdf_bytes):
 
 
 def get_assigned_makaleler_for_hakem(hakem_id):
-    """
-    Belirtilen hakem_id için, hakem ataması yapılmış makaleleri,
-    makale başlığı, değerlendirme metni, değerlendirme tarihi ve anonim PDF bilgisini getirir.
-    """
     conn = get_db_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -267,6 +263,7 @@ def get_assigned_makaleler_for_hakem(hakem_id):
     SELECT 
         m.id AS makale_id,
         m.baslik AS makale_baslik,
+        m.durum,  -- BURADA SEÇİLİ OLMALI
         d.degerlendirme_metin,
         d.tarih AS degerlendirme_tarih,
         m.anonimPdf AS anon_pdf
@@ -278,6 +275,7 @@ def get_assigned_makaleler_for_hakem(hakem_id):
     rows = cursor.fetchall()
     conn.close()
     return rows
+
 
 
 def update_evaluation_text(makale_id, new_text):

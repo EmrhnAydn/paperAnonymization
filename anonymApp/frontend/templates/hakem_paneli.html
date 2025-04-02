@@ -65,8 +65,7 @@
         </div>
       </div>
     </div>
-  </div>
-  
+</div>
 
 <script>
 let currentMakaleId = null;  // Şu an değerlendirmeye açılan makale ID'si
@@ -85,7 +84,6 @@ document.addEventListener('DOMContentLoaded', function () {
             console.error("Makale ID bilgisi eksik.");
             return;
         }
-        // AJAX isteği ile revize talebi gönderiliyor (değerlendirme metni güncelleniyor)
         fetch('/api/request_revision', {
             method: 'POST',
             headers: {
@@ -99,8 +97,12 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(response => response.json())
         .then(data => {
             console.log("Revize talebi gönderildi:", data);
-            // Revize talebi iletildikten sonra ilgili satırdaki "Değerlendir" butonu devre dışı bırakılabilir.
-            document.querySelector(`button[data-makale-id="${currentMakaleId}"]`).disabled = true;
+            // Revize talebi sonrasında ilgili "Değerlendir" butonu devre dışı bırakılıyor.
+            const btn = document.querySelector(`button[data-makale-id="${currentMakaleId}"]`);
+            if(btn) {
+                btn.disabled = true;
+                btn.textContent = "Revize İstendi";
+            }
         })
         .catch(err => console.error("Hata:", err));
     });
@@ -117,7 +119,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        // Seçilen hakeme ait makaleleri getir (API, her makale için "durum" bilgisini de döndürüyor)
+        // Seçilen hakeme ait makaleleri getir (API her makale için "durum" bilgisini de döndürüyor)
         fetch(`/api/get_assigned_makaleler/${selectedHakemId}`)
             .then(response => response.json())
             .then(data => {
@@ -155,113 +157,82 @@ document.addEventListener('DOMContentLoaded', function () {
                         row.appendChild(tdDownload);
 
                         // Değerlendir Butonu
-                        // Değerlendir Butonu
-const tdDegerlendir = document.createElement('td');
-const btnDegerlendir = document.createElement('button');
-btnDegerlendir.textContent = "Değerlendir";
-btnDegerlendir.classList.add('btn', 'btn-success', 'btn-sm');
-// Makale ID'sini data attribute olarak ekleyelim
-btnDegerlendir.setAttribute('data-makale-id', item.makale_id);
+                        const tdDegerlendir = document.createElement('td');
+                        const btnDegerlendir = document.createElement('button');
+                        btnDegerlendir.textContent = "Değerlendir";
+                        btnDegerlendir.classList.add('btn', 'btn-success', 'btn-sm');
+                        btnDegerlendir.setAttribute('data-makale-id', item.makale_id);
 
-// Eğer makalenin durumu "Revised Uploaded" veya yeniden anonimleştirilmişse (anonim_pdf_exists true)
-// then değerlendirme butonu aktif olsun.
-if(item.durum === "Revised Uploaded" || item.anonim_pdf_exists) {
-    btnDegerlendir.disabled = false;
-    btnDegerlendir.title = "Revize makale indirip değerlendirme yapabilirsiniz.";
-    btnDegerlendir.setAttribute('data-bs-toggle', 'modal');
-    btnDegerlendir.setAttribute('data-bs-target', '#degerlendirModal');
-    btnDegerlendir.addEventListener('click', function(){
-        currentMakaleId = item.makale_id;
-        console.log("Değerlendirme için (Revized/Anonimized) Makale ID:", currentMakaleId);
-    });
-} else if(item.durum === "Conclusion") {
-    // Makale sonuçlandırıldıysa buton devre dışı
-    btnDegerlendir.disabled = true;
-    btnDegerlendir.textContent = "Sonuçlandı";
-    btnDegerlendir.title = "Bu makale sonuçlandırılmıştır.";
-} 
-// Eğer değerlendirme notu daha önce iletilmişse (ve "Atama yapıldı" değilse)
-// butonu devre dışı bırakıyoruz.
-else if(item.degerlendirme_metin && item.degerlendirme_metin !== "Atama yapıldı"){
-    btnDegerlendir.disabled = true;
-    btnDegerlendir.title = "Bu makale için değerlendirme zaten iletilmiş.";
-} 
-// Diğer durumlarda normal modal açılmasını sağlayalım.
-else {
-    btnDegerlendir.setAttribute('data-bs-toggle', 'modal');
-    btnDegerlendir.setAttribute('data-bs-target', '#degerlendirModal');
-    btnDegerlendir.addEventListener('click', function(){
-        currentMakaleId = item.makale_id;
-        console.log("Değerlendirme için Makale ID:", currentMakaleId);
-    });
-}
-tdDegerlendir.appendChild(btnDegerlendir);
-row.appendChild(tdDegerlendir);
+                        // Durum kontrolü:
+                        if (item.durum === "Request a Revision") {
+                            btnDegerlendir.disabled = true;
+                            btnDegerlendir.textContent = "Revize İstendi";
+                            btnDegerlendir.title = "Bu makale için revize talebi gönderilmiştir.";
+                        } else if (item.durum === "Conclusion") {
+                            btnDegerlendir.disabled = true;
+                            btnDegerlendir.textContent = "Sonuçlandı";
+                            btnDegerlendir.title = "Bu makale sonuçlandırılmıştır.";
+                        } else if (item.durum === "Revised Uploaded" || item.anonim_pdf_exists) {
+                            btnDegerlendir.disabled = false;
+                            btnDegerlendir.title = "Revize makale indirip değerlendirme yapabilirsiniz.";
+                            btnDegerlendir.setAttribute('data-bs-toggle', 'modal');
+                            btnDegerlendir.setAttribute('data-bs-target', '#degerlendirModal');
+                            btnDegerlendir.addEventListener('click', function(){
+                                currentMakaleId = item.makale_id;
+                                console.log("Değerlendirme için (Revized/Anonimized) Makale ID:", currentMakaleId);
+                            });
+                        } else if (item.degerlendirme_metin && item.degerlendirme_metin !== "Atama yapıldı") {
+                            btnDegerlendir.disabled = true;
+                            btnDegerlendir.title = "Bu makale için değerlendirme zaten iletilmiş.";
+                        } else {
+                            btnDegerlendir.setAttribute('data-bs-toggle', 'modal');
+                            btnDegerlendir.setAttribute('data-bs-target', '#degerlendirModal');
+                            btnDegerlendir.addEventListener('click', function(){
+                                currentMakaleId = item.makale_id;
+                                console.log("Değerlendirme için Makale ID:", currentMakaleId);
+                            });
+                        }
 
+                        tdDegerlendir.appendChild(btnDegerlendir);
+                        row.appendChild(tdDegerlendir);
 
                         makalelerTableBody.appendChild(row);
                     });
                 }
-                // Paneli görünür yap
                 hakemPanel.style.display = 'block';
             })
             .catch(err => {
                 console.error("Hata oluştu:", err);
             });
     });
-});
-// Revize İste butonunun event listener'ı mevcutsa, şimdi "Sonuçlandır" için de ekleyelim:
-document.getElementById('btnSonuclandir').addEventListener('click', function() {
-    const degerlendirmeText = document.getElementById('degerlendirmeText').value;
-    if (!currentMakaleId) {
-        console.error("Makale ID bilgisi eksik.");
-        return;
-    }
-    // API'ye POST isteği gönderiyoruz.
-    fetch('/api/complete_evaluation', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            makale_id: currentMakaleId,
-            degerlendirme_text: degerlendirmeText
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        console.log("Makale sonuçlandırıldı:", data);
-        // İşlem başarılıysa, hakem panelindeki ilgili "Değerlendir" butonunu devre dışı bırakıp metnini "Sonuçlandı" yapıyoruz.
-        const btn = document.querySelector(`button[data-makale-id="${currentMakaleId}"]`);
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = "Sonuçlandı";
-            btn.title = "Bu makale sonuçlandırılmıştır.";
+
+    // "Sonuçlandır" butonuna tıklanırsa complete evaluation isteği gönder
+    document.getElementById('btnSonuclandir').addEventListener('click', function() {
+        const degerlendirmeText = document.getElementById('degerlendirmeText').value;
+        if (!currentMakaleId) {
+            console.error("Makale ID bilgisi eksik.");
+            return;
         }
-    })
-    .catch(err => console.error("Hata:", err));
-});
-
-    // API'ye POST isteği gönderiyoruz.
-    fetch('/api/complete_evaluation', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            makale_id: currentMakaleId,
-            degerlendirme_text: degerlendirmeText
+        fetch('/api/complete_evaluation', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                makale_id: currentMakaleId,
+                degerlendirme_text: degerlendirmeText
+            })
         })
-    })
-    .then(response => response.json())
-    .then(data => {
-        console.log("Makale sonuçlandırıldı:", data);
-        // İşlem başarılıysa, hakem panelindeki ilgili "Değerlendir" butonunu devre dışı bırakıyoruz.
-        const btn = document.querySelector(`button[data-makale-id="${currentMakaleId}"]`);
-        if(btn) {
-            btn.disabled = true;
-            btn.title = "Bu makale sonuçlandırılmıştır.";
-        }
-    })
-    .catch(err => console.error("Hata:", err));
-
-
-
+        .then(response => response.json())
+        .then(data => {
+            console.log("Makale sonuçlandırıldı:", data);
+            const btn = document.querySelector(`button[data-makale-id="${currentMakaleId}"]`);
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = "Sonuçlandı";
+                btn.title = "Bu makale sonuçlandırılmıştır.";
+            }
+        })
+        .catch(err => console.error("Hata:", err));
+    });
+});
 </script>
 {% endblock %}
