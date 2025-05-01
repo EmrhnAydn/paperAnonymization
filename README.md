@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project is designed to [briefly describe the purpose of the project, e.g., "anonymize documents and manage user interactions through a web interface"]. It consists of a backend and a frontend component, each serving distinct roles in the overall functionality. This project determines the area of ​​expertise of the article with NLP and ensures that it is directed to the appropriate referee. It encrypts the information of the article authors with AES and detects and blurs the images of the authors with Poppler. In this way, anonymization is ensured in the articles sent to the referee.
+This project is designed to Flask and SQLite. It determines the area of ​​expertise of the article with NLP and ensures that it is directed to the appropriate referee. It encrypts the information of the article authors with AES and detects and blurs the images of the authors with Poppler. In this way, anonymization is ensured in the articles sent to the referee.
 
 ## Project Structure
 
