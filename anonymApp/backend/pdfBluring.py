@@ -7,7 +7,7 @@ import img2pdf
 import os
 from io import BytesIO
 
-def blur_pdf_images(pdf_bytes, poppler_path=r"C:\Users\emirh\OneDrive\Masaüstü\bluringPhoto\poppler-24.08.0\Library\bin"):
+def blur_pdf_images(pdf_bytes, poppler_path=r"YOUR PATH AND/poppler-24.08.0\Library\bin"): #USE poppler-24.08.0
     """
     PDF içindeki sayfalardaki yüzleri bulanıklaştırarak yeni bir PDF döndürür.
 
